@@ -2,7 +2,6 @@
 (function () {
   'use strict';
   const KEY = 'last-save-v1';
-  const DATA_CACHE_KEY = 'last-save-data-v1';
   const POINTS = { platinum: 300, gold: 90, silver: 30, bronze: 15 };
   const GRADES = [['platinum', 'P'], ['gold', 'G'], ['silver', 'S'], ['bronze', 'B']];
   const STAGES = [
@@ -139,6 +138,110 @@
     $('audit').replaceChildren(...cells.map(([v, l, c]) => h('div', { class: 'cell ' + (c || '') }, h('b', { text: String(v) }), h('span', { text: l }))));
   }
 
+  // ---------- missable timeline (SVG) ----------
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function s(tag, attrs, text) {
+    const el = document.createElementNS(SVGNS, tag);
+    for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, String(v));
+    if (text != null) el.textContent = text;
+    return el;
+  }
+  // Slots follow the "I am in" selector 1:1: 0 Before, 1-5 chapters, 6 After the story.
+  const TL = { x0: 30, w: 134, n: 7 };
+  const slotX = (i) => TL.x0 + i * TL.w;
+  function renderTimeline() {
+    const { x0, w, n } = TL;
+    const xEnd = slotX(n), line = slotX(2), axisY = 342;
+    const svg = s('svg', { viewBox: '0 0 1000 400', role: 'img', class: 'tl',
+      'aria-label': 'Timeline of the run. Chapter 1 closes for good at the red line; Positive Mental Attitude has one meditation spot that only exists before it. You are in ' + CHAPTER_LABELS[state.chapter] + '.' });
+    // chapter bands
+    for (let i = 0; i < n; i++) svg.append(s('rect', { x: slotX(i), y: 40, width: w, height: axisY - 40, class: i % 2 ? 'band b1' : 'band b0' }));
+    // PMA window bar: solid to the red line, faded after it
+    const barY = 118, barH = 30;
+    svg.append(s('rect', { x: slotX(1), y: barY, width: w, height: barH, rx: 4, class: 'pma-on' }));
+    svg.append(s('rect', { x: line, y: barY, width: xEnd - line, height: barH, rx: 4, class: 'pma-off' }));
+    svg.append(s('text', { x: line - 10, y: 84, 'text-anchor': 'end', class: 'tl-big hot' }, 'Positive Mental Attitude'));
+    svg.append(s('text', { x: line - 10, y: 108, 'text-anchor': 'end', class: 'tl-mid hot' }, '1 spot only exists here'));
+    svg.append(s('text', { x: line + 12, y: 176, class: 'tl-mid dim' }, '17 more meditations stay open'));
+    // point of no return
+    svg.append(s('line', { x1: line, x2: line, y1: 34, y2: axisY, class: 'noreturn' }));
+    svg.append(s('text', { x: line + 12, y: 24, class: 'tl-big red' }, 'POINT OF NO RETURN — Chapter 1 closes'));
+    // start markers (teal diamonds)
+    const diamond = (cx, cy) => s('path', { d: `M${cx} ${cy - 11} L${cx + 11} ${cy} L${cx} ${cy + 11} L${cx - 11} ${cy} Z`, class: 'open-mark' });
+    const open = [
+      [slotX(2) + 18, 222, ['Both characters playable:', 'meditations count double']],
+      [slotX(2) + 18, 290, ['Scooter Bros app (Moses)']],
+      [slotX(4) + 18, 222, ['Bank vaults open']],
+    ];
+    for (const [cx, cy, lines] of open) {
+      svg.append(diamond(cx, cy));
+      lines.forEach((t, i) => svg.append(s('text', { x: cx + 18, y: cy + 6 + i * 22, class: 'tl-mid teal' }, t)));
+    }
+    // axis + labels
+    svg.append(s('line', { x1: x0, x2: xEnd, y1: axisY, y2: axisY, class: 'axis' }));
+    const names = [['Before', 'starting'], ['Chapter 1'], ['Chapter 2'], ['Chapter 3'], ['Chapter 4'], ['Chapter 5'], ['After the', 'story']];
+    names.forEach((ls, i) => {
+      svg.append(s('line', { x1: slotX(i), x2: slotX(i), y1: axisY, y2: axisY + 8, class: 'axis' }));
+      ls.forEach((t, j) => svg.append(s('text', { x: slotX(i) + w / 2, y: axisY + 30 + j * 22, 'text-anchor': 'middle', class: 'tl-mid' + (i === state.chapter ? ' you-lbl' : '') }, t)));
+    });
+    svg.append(s('line', { x1: slotX(n), x2: slotX(n), y1: axisY, y2: axisY + 8, class: 'axis' }));
+    // YOU marker
+    const yx = slotX(state.chapter) + w / 2;
+    svg.append(s('line', { x1: yx, x2: yx, y1: 190, y2: axisY - 20, class: 'you-line' }));
+    svg.append(s('path', { d: `M${yx - 13} ${axisY - 22} L${yx + 13} ${axisY - 22} L${yx} ${axisY - 2} Z`, class: 'you-mark', id: 'tlYou', 'data-chapter': state.chapter }));
+    svg.append(s('text', { x: yx, y: axisY - 28, 'text-anchor': 'middle', class: 'tl-big you' }, 'YOU'));
+    $('tlsvg').replaceChildren(svg);
+  }
+
+  // ---------- "Before you finish Chapter N" panel ----------
+  // Only pack-verified actions. `id` = trophy whose earned state means the action is done (null = reminder, state cannot know).
+  const BEFORE = {
+    1: [
+      { id: 28, text: "Do Lucia's balcony meditation at Jason's house (the morning after Down to Earth) before the chapter ends. It is the one possibly-missable window; it is not confirmed as required, so do it to be safe.", done: 'Positive Mental Attitude is earned, so this is covered.' },
+      { id: 20, text: "Watch for Cal's fishing text after a Chapter 1 mission (purple icon on the map): that is Baited My Tackle.", done: 'Baited My Tackle is earned.' },
+      { id: null, text: 'Keep a manual save before big missions. There is no mission replay.' },
+    ],
+    2: [
+      { id: 55, text: 'Pick up the Scooter Bros app from Moses and register vehicles as you find them (On the Spot wants 10).', done: 'On the Spot is earned.' },
+      { id: 28, text: 'Meditations now count double when both characters meditate together, so use that for Positive Mental Attitude.', done: 'Positive Mental Attitude is earned.' },
+    ],
+    3: [
+      { id: 39, text: "Yasmani's jobs give you the Snap Gun for a clean jewelry robbery: that is Sneakthief.", done: 'Sneakthief is earned.' },
+    ],
+    4: [
+      { id: 40, text: 'Bank vaults open: bring a fast bike and expect 4 stars on every job. Maximum Withdrawal wants 5 of 8.', done: 'Maximum Withdrawal is earned.' },
+    ],
+    5: [
+      { id: null, text: 'Never push your Criminal Profile to Irredeemable. It is permanent.' },
+      { id: null, text: 'Cheats unlock after the credits and disable trophies and saving for that session. Save first.' },
+    ],
+  };
+  BEFORE[6] = BEFORE[5];
+  function renderBefore() {
+    const ch = state.chapter;
+    const el = $('before');
+    const title = ch === 0 ? 'Before you start' : ch === 6 ? 'Now that the story is finished' : `Before you finish Chapter ${ch}`;
+    const items = BEFORE[ch] || [];
+    const kids = [h('h2', { text: title })];
+    if (!items.length) {
+      kids.push(h('p', { class: 'ok', text: 'Nothing is pending before you start. The first thing that can close on you is in Chapter 1: the balcony meditation at Jason’s house.' }));
+    } else {
+      const byId = (id) => state.earned[id] != null;
+      const tracked = items.filter((it) => it.id != null);
+      const left = tracked.filter((it) => !byId(it.id)).length;
+      kids.push(h('p', { class: left ? 'warn' : 'ok', text: tracked.length
+        ? (left ? `${left} of ${tracked.length} trackable action${tracked.length > 1 ? 's' : ''} still open.` : 'Every trackable action for this chapter is done. Reminders below still apply.')
+        : 'Reminders only; this app cannot tell whether you have done these.' }));
+      kids.push(h('ul', { class: 'blist' }, items.map((it) => {
+        const done = it.id != null && byId(it.id);
+        return h('li', { class: done ? 'done' : (it.id == null ? 'note' : 'todo') },
+          h('i', { class: 'mk', 'aria-hidden': 'true', text: done ? '✓' : (it.id == null ? '•' : '○') }),
+          h('span', {}, h('span', { class: 'st', text: done ? 'DONE ' : (it.id == null ? 'REMINDER ' : 'TO DO ') }), it.text, done ? h('em', { class: 'doneby', text: ' ' + it.done }) : null));
+      })));
+    }
+    el.replaceChildren(...kids);
+  }
+
   // ---------- list ----------
   function passes(t) {
     const f = state.filters;
@@ -206,7 +309,7 @@
     }
     container.replaceChildren(frag);
   }
-  function renderAll() { renderHeader(); renderList(); if (currentDetail != null) renderDetail(currentDetail); }
+  function renderAll() { renderHeader(); renderTimeline(); renderBefore(); renderList(); if (currentDetail != null) renderDetail(currentDetail); }
 
   function toggle(id, on) {
     if (on) state.earned[id] = Date.now(); else delete state.earned[id];
@@ -327,31 +430,17 @@
   function start(data) {
     doc = data;
     load();
-    wire(); syncControls(); renderAudit(); renderHeader(); renderList(); renderSaved(false); route();
+    wire(); syncControls(); renderAudit(); renderHeader(); renderTimeline(); renderBefore(); renderList(); renderSaved(false); route();
   }
 
-  // ---------- data loading: fetch, with a file-picker fallback for file:// ----------
+  // ---------- data loading: the script mirror (works from file://), else fetch the JSON ----------
   function fail() {
-    const pick = h('input', { type: 'file', accept: 'application/json,.json' });
-    pick.addEventListener('change', async () => {
-      try {
-        const data = JSON.parse(await pick.files[0].text());
-        if (!data.trophies || !data.sources) throw new Error('bad');
-        sset(DATA_CACHE_KEY, JSON.stringify(data));
-        box.remove(); start(data);
-      } catch (e) { box.append(h('p', { text: 'That file is not trophies.json.' })); }
-    });
-    const box = h('div', { class: 'loadfail' },
-      h('p', {}, 'This browser blocked loading data/trophies.json from a local file. Choose that file once (it is in the app/data folder) and it will be remembered, or run ', h('code', { text: 'node serve.ts' }), '.'),
-      pick);
-    $('main').prepend(box);
+    $('main').prepend(h('div', { class: 'loadfail' },
+      h('p', {}, 'Could not load the trophy data (data/trophies.js and data/trophies.json). Check that the app/data folder is intact.')));
   }
   function boot() {
-    fetch('data/trophies.json').then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(start).catch(() => {
-      const cached = sget(DATA_CACHE_KEY);
-      if (cached) { try { start(JSON.parse(cached)); return; } catch (e) { /* fall through */ } }
-      fail();
-    });
+    if (window.LAST_SAVE_DATA) { start(window.LAST_SAVE_DATA); return; }
+    fetch('data/trophies.json').then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(start).catch(fail);
   }
   boot();
 })();
