@@ -24,7 +24,7 @@
   function sset(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { storageOK = false; return false; } }
 
   // ---------- state ----------
-  const defaults = () => ({ earned: {}, chapter: 0, hideHidden: false, filters: { grade: 'all', cat: 'all', conf: 'all', q: '' }, savedAt: null });
+  const defaults = () => ({ earned: {}, chapter: 0, hideHidden: false, filters: { grade: 'all', cat: 'all', conf: 'all', q: '' }, med: {}, savedAt: null });
   let state = defaults();
   let doc = null;
   const revealed = new Set();
@@ -48,6 +48,11 @@
     const f = raw.filters || {};
     for (const k of Object.keys(s.filters)) if (typeof f[k] === 'string') s.filters[k] = f[k];
     s.savedAt = typeof raw.savedAt === 'number' ? raw.savedAt : null;
+    if (raw.med && typeof raw.med === 'object' && !Array.isArray(raw.med)) {
+      const valid = new Set();
+      for (const sp of medSpots()) for (const w of whoOf(sp)) valid.add(sp.id + ':' + w);
+      for (const [k, v] of Object.entries(raw.med)) if (v === true && valid.has(k)) s.med[k] = true;
+    }
     return s;
   }
   function load() {
@@ -116,6 +121,7 @@
     const el = $('saved');
     el.classList.toggle('off', !storageOK);
     $('savedAt').textContent = state.savedAt ? fmtDate(state.savedAt) : 'nothing yet';
+    document.querySelectorAll('.js-savedat').forEach((n) => { n.textContent = state.savedAt ? fmtDate(state.savedAt) : 'nothing yet'; });
     el.firstChild.textContent = storageOK ? 'Saved in this browser: ' : 'Browser storage unavailable (changes live in memory; use Export): ';
     if (flash) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
   }
@@ -136,6 +142,62 @@
       [read, 'sources read'],
     ];
     $('audit').replaceChildren(...cells.map(([v, l, c]) => h('div', { class: 'cell ' + (c || '') }, h('b', { text: String(v) }), h('span', { text: l }))));
+  }
+
+  // ---------- meditation spot grid ----------
+  const pma = () => doc.trophies.find((t) => t.id === 28);
+  const medSpots = () => ((doc && pma() && pma().meditationSpots) || (doc ? [] : []));
+  const whoOf = (sp) => (sp.kind === 'unmapped' ? [] : sp.kind === 'house' ? ['once'] : ['jason', 'lucia']);
+  const medOn = (sp, w) => state.med[sp.id + ':' + w] === true;
+  const medDone = (sp) => whoOf(sp).length > 0 && whoOf(sp).every((w) => medOn(sp, w));
+  function kalagaUnlocked() {
+    return medSpots().filter((sp) => sp.kind !== 'unmapped' && sp.kind !== 'final').every(medDone);
+  }
+  function medCount() {
+    const unlocked = kalagaUnlocked();
+    return medSpots().reduce((n, sp) => n + (sp.kind === 'final' && !unlocked ? 0 : whoOf(sp).filter((w) => medOn(sp, w)).length), 0);
+  }
+  function medToggle(sp, w, on) {
+    if (on) state.med[sp.id + ':' + w] = true; else delete state.med[sp.id + ':' + w];
+    save(); renderMed();
+  }
+  const WHO_LABEL = { jason: 'Jason', lucia: 'Lucia', once: 'Meditated' };
+  function medCell(sp, unlocked) {
+    if (sp.kind === 'unmapped') {
+      return h('div', { class: 'mcell unmapped', 'aria-disabled': 'true' }, h('b', { text: 'Unmapped spot' }), h('span', { class: 'mnote', text: sp.label }));
+    }
+    const locked = sp.kind === 'final' && !unlocked;
+    const cls = 'mcell' + (sp.kind === 'house' ? ' house' : '') + (locked ? ' locked' : '') + (medDone(sp) && !locked ? ' done' : '');
+    const kids = [h('b', { text: sp.name }), h('span', { class: 'marea', text: sp.area })];
+    if (sp.kind === 'house') kids.push(h('span', { class: 'mtag', text: 'CHAPTER 1 ONLY · single session · counts 1' }));
+    if (locked) kids.push(h('span', { class: 'mtag lock', text: 'LOCKED until every other mapped spot is fully toggled' }));
+    if (sp.note) kids.push(h('span', { class: 'mnote', text: sp.note }));
+    const tg = h('div', { class: 'mtoggles' }, whoOf(sp).map((w) => {
+      const box = h('input', { type: 'checkbox', disabled: locked, 'data-spot': sp.id, 'data-who': w, 'aria-label': `${sp.name}: ${WHO_LABEL[w]}` });
+      box.checked = medOn(sp, w);
+      box.addEventListener('change', () => medToggle(sp, w, box.checked));
+      return h('label', {}, box, ' ' + WHO_LABEL[w]);
+    }));
+    return h('div', { class: cls }, ...kids, tg);
+  }
+  function renderMed() {
+    const el = $('medgrid');
+    if (!el) return;
+    const spots = medSpots();
+    const unlocked = kalagaUnlocked();
+    const groups = [['coastal', 'Coastal'], ['inland', 'Inland'], ['special', 'Special']];
+    const kids = [
+      h('div', { class: 'mcount' },
+        h('span', { class: 'mbig' }, h('b', { id: 'medCount', class: 'num', text: String(medCount()) }), ' meditations logged'),
+        h('p', { class: 'mhonest', text: 'Honest count: the trophy counter target is 18 (PowerPyx and GTABase), but the 100% checklist asks for only 15. Published location counts do not fully reconcile yet, and two locations are still unmapped, so this grid does not add up to 18 on purpose.' })),
+    ];
+    for (const [key, label] of groups) {
+      const inG = spots.filter((sp) => sp.region === key);
+      if (!inG.length) continue;
+      kids.push(h('h4', { class: 'mgroup', text: label }), h('div', { class: 'mgrid' }, inG.map((sp) => medCell(sp, unlocked))));
+    }
+    kids.push(h('p', { class: 'hint', text: 'Checking spots here never checks the trophy itself: tick “Earned” above when the game awards it.' }));
+    el.replaceChildren(...kids);
   }
 
   // ---------- missable timeline (SVG) ----------
@@ -309,7 +371,7 @@
     }
     container.replaceChildren(frag);
   }
-  function renderAll() { renderHeader(); renderTimeline(); renderBefore(); renderList(); if (currentDetail != null) renderDetail(currentDetail); }
+  function renderAll() { renderHeader(); renderTimeline(); renderBefore(); renderList(); if (currentDetail != null) renderDetail(currentDetail); if (location.hash === '#audit') renderAuditView(); }
 
   function toggle(id, on) {
     if (on) state.earned[id] = Date.now(); else delete state.earned[id];
@@ -355,6 +417,7 @@
         h('div', { class: 'block' }, h('h3', { text: 'Guide steps' }),
           h('ol', {}, (t.guide || '').split('\n').map((l) => l.replace(/^\s*\d+\.\s*/, '').trim()).filter(Boolean).map((l) => h('li', { text: l }))),
           h('p', { class: 'hint' }, 'Cited: ', ...srcMarkers(t.sources))),
+        t.meditationSpots ? h('div', { class: 'block medblock' }, h('h3', { text: 'Meditation spots' }), h('div', { id: 'medgrid' })) : null,
         h('div', { class: 'block explain' }, h('h3', { text: 'Confidence' }), h('p', {}, badge(t.confidence), ' ', (BADGES[t.confidence] || BADGES.unconfirmed).text)),
         h('div', { class: 'block' }, h('h3', { text: 'Where it fits' }),
           h('p', { text: `Stage: ${stage ? stage.title : 'n/a'}. Chapter/stage field: ${t.stage}. PSN order: #${t.psn}.` }),
@@ -367,10 +430,48 @@
     }
     kids.push(d);
     view.replaceChildren(...kids);
+    renderMed();
+  }
+
+  // ---------- Audit view ----------
+  function renderAuditView() {
+    const el = $('auditView');
+    const srcs = doc.sources;
+    const dates = srcs.map((x) => x.accessed).filter(Boolean).sort();
+    const last = dates[dates.length - 1];
+    const read = last ? new Date(last + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'n/a';
+    const head = h('tr', {}, h('th', { class: 'c-psn', text: '#' }), h('th', { class: 'c-name', text: 'Trophy' }), h('th', { text: 'Grade' }), h('th', { text: 'Confidence' }),
+      srcs.map((x) => h('th', { class: 'c-src', title: x.name, text: x.id })));
+    const rows = doc.trophies.map((t) => h('tr', { 'data-psn': t.psn },
+      h('td', { class: 'c-psn num', text: String(t.psn) }), h('td', { class: 'c-name', text: t.name }), h('td', {}, chip(t.grade)), h('td', {}, badge(t.confidence)),
+      srcs.map((x) => (t.sources || []).includes(x.id) ? h('td', { class: 'c-src yes', title: x.name, 'aria-label': 'cited in ' + x.id, text: '●' }) : h('td', { class: 'c-src', 'aria-label': 'not cited in ' + x.id }))));
+    const conflicts = doc.conflicts.map((c) => h('article', { class: 'conflict' },
+      h('div', { class: 'chead' }, h('span', { class: 'badge conflict' }, h('i', { text: '!', 'aria-hidden': 'true' }), 'sources disagree'), h('h3', { text: c.topic })),
+      h('div', { class: 'sides' }, c.sides.map((sd, i) => h('div', { class: 'side' },
+        h('span', { class: 'sidelbl', text: 'Side ' + String.fromCharCode(65 + i) }), h('p', { text: sd.claim }),
+        h('p', { class: 'num' }, 'Sources: ', sd.sources.map((id) => h('span', { class: 'src', text: `[${id}] ` })))))),
+      c.note ? h('p', { class: 'cnote', text: c.note }) : null));
+    el.replaceChildren(
+      h('section', { class: 'apanel' }, h('h2', { text: 'Source matrix' }),
+        h('p', { class: 'hint', text: `${doc.trophies.length} trophies × ${srcs.length} sources. ● = the source is cited for that trophy.` }),
+        h('div', { class: 'matrixwrap' }, h('table', { class: 'matrix' }, h('thead', {}, head), h('tbody', {}, rows)))),
+      h('section', { class: 'apanel' }, h('h2', { text: `Conflicts (${doc.conflicts.length})` }), ...conflicts),
+      h('section', { class: 'apanel' }, h('h2', { text: 'Data status' }),
+        h('p', {}, 'Last saved: ', h('span', { class: 'num js-savedat', text: state.savedAt ? fmtDate(state.savedAt) : 'nothing yet' })),
+        h('p', { class: 'num', text: 'Sources read ' + read }),
+        h('div', { class: 'tools2' },
+          h('button', { type: 'button', id: 'export2', onclick: doExport, text: 'Export' }),
+          h('label', { class: 'filebtn' }, 'Import ', h('input', { type: 'file', id: 'import2', accept: 'application/json,.json', onchange: (e) => { const f = e.target.files[0]; e.target.value = ''; doImport(f); } })),
+          h('span', { class: 'hint', id: 'toolmsg2', role: 'status' }))));
   }
   function route() {
     const m = /^#t\/(\d+)$/.exec(location.hash);
     if (!doc) return;
+    const audit = location.hash === '#audit';
+    $('auditView').hidden = !audit;
+    for (const id of ['timeline', 'before', 'tools', 'main', 'audit']) $(id).hidden = audit;
+    $('viewGuide').setAttribute('aria-pressed', String(!audit)); $('viewAudit').setAttribute('aria-pressed', String(audit));
+    if (audit) { currentDetail = null; renderAuditView(); window.scrollTo(0, 0); return; }
     if (m) {
       currentDetail = Number(m[1]);
       renderDetail(currentDetail);
@@ -392,7 +493,22 @@
     $('fCat').value = state.filters.cat;
     if ($('fCat').value !== state.filters.cat) { state.filters.cat = 'all'; $('fCat').value = 'all'; }
   }
-  function msg(text) { $('toolmsg').textContent = text; }
+  function msg(text) { $('toolmsg').textContent = text; const m2 = $('toolmsg2'); if (m2) m2.textContent = text; }
+  function doExport() {
+    const blob = new Blob([JSON.stringify({ app: 'last-save', version: 1, exportedAt: new Date().toISOString(), ...state }, null, 2)], { type: 'application/json' });
+    const a = h('a', { href: URL.createObjectURL(blob), download: 'last-save-progress.json' });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    msg('Exported ' + Object.keys(state.earned).length + ' earned trophies and ' + Object.keys(state.med).length + ' meditation toggles.');
+  }
+  async function doImport(file) {
+    if (!file) return;
+    try {
+      const next = normalize(JSON.parse(await file.text()));
+      state = next; syncControls(); save(); renderAll();
+      msg('Imported ' + Object.keys(state.earned).length + ' earned trophies and ' + Object.keys(state.med).length + ' meditation toggles.');
+    } catch (err) { msg('Import failed: that file is not a LAST SAVE export.'); }
+  }
   function wire() {
     const cats = [...new Set(doc.trophies.map((t) => t.category))];
     $('fCat').replaceChildren(h('option', { value: 'all', text: 'All' }), ...cats.map((c) => h('option', { value: c, text: c })));
@@ -401,23 +517,10 @@
     const f = (id, key) => $(id).addEventListener(id === 'fQ' ? 'input' : 'change', (e) => { state.filters[key] = e.target.value; save(); renderList(); });
     f('fGrade', 'grade'); f('fCat', 'cat'); f('fConf', 'conf'); f('fQ', 'q');
     $('fClear').addEventListener('click', () => { state.filters = defaults().filters; syncControls(); save(); renderList(); });
-    $('export').addEventListener('click', () => {
-      const blob = new Blob([JSON.stringify({ app: 'last-save', version: 1, exportedAt: new Date().toISOString(), ...state }, null, 2)], { type: 'application/json' });
-      const a = h('a', { href: URL.createObjectURL(blob), download: 'last-save-progress.json' });
-      document.body.append(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-      msg('Exported ' + Object.keys(state.earned).length + ' earned trophies.');
-    });
-    $('import').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      e.target.value = '';
-      if (!file) return;
-      try {
-        const next = normalize(JSON.parse(await file.text()));
-        state = next; syncControls(); save(); renderAll();
-        msg('Imported ' + Object.keys(state.earned).length + ' earned trophies.');
-      } catch (err) { msg('Import failed: that file is not a LAST SAVE export.'); }
-    });
+    $('export').addEventListener('click', doExport);
+    $('import').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; doImport(f); });
+    $('viewGuide').addEventListener('click', () => { location.hash = ''; if (!location.hash) route(); });
+    $('viewAudit').addEventListener('click', () => { location.hash = '#audit'; });
     $('reset').addEventListener('click', () => {
       if (!window.confirm('Reset all progress, chapter and filters in this browser? Export first if you want a backup.')) return;
       state = defaults(); revealed.clear();

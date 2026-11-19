@@ -12,6 +12,10 @@
   <div class="brand">
     <h1>LAST SAVE</h1>
     <p class="sub">GTA VI trophy guide &amp; missable timeline</p>
+    <nav class="viewsw" aria-label="View">
+      <button type="button" id="viewGuide" aria-pressed="true">Guide</button>
+      <button type="button" id="viewAudit" aria-pressed="false">Audit</button>
+    </nav>
   </div>
   <div class="progress" aria-live="polite">
     <div class="big"><span id="earned" class="num">0</span><span class="slash">/</span><span id="total" class="num">55</span>
@@ -63,8 +67,9 @@
   </div>
   <div id="detailView" hidden></div>
 </main>
+<div id="auditView" hidden></div>
 
-<section class="tools" aria-label="Save data">
+<section id="tools" class="tools" aria-label="Save data">
   <button id="export" type="button">Export</button>
   <label class="filebtn">Import <input id="import" type="file" accept="application/json,.json"></label>
   <button id="reset" type="button" class="danger-ghost">Reset</button>
