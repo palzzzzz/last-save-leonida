@@ -418,7 +418,7 @@
         h('div', { class: 'block' }, h('h3', { text: 'Guide steps' }),
           h('ol', {}, (t.guide || '').split('\n').map((l) => l.replace(/^\s*\d+\.\s*/, '').trim()).filter(Boolean).map((l) => h('li', { text: l }))),
           h('p', { class: 'hint' }, 'Cited: ', ...srcMarkers(t.sources))),
-        t.meditationSpots ? h('div', { class: 'block medblock' }, h('h3', { text: 'Meditation spots' }), h('div', { id: 'medgrid' })) : null,
+        t.meditationSpots ? h('div', { class: 'block medblock' }, h('h3', { text: 'Meditation spots' }), h('div', { id: 'medgrid' })) : '',
         h('div', { class: 'block explain' }, h('h3', { text: 'Confidence' }), h('p', {}, badge(t.confidence), ' ', (BADGES[t.confidence] || BADGES.unconfirmed).text)),
         h('div', { class: 'block' }, h('h3', { text: 'Where it fits' }),
           h('p', { text: `Stage: ${stage ? stage.title : 'n/a'}. Chapter/stage field: ${t.stage}. PSN order: #${t.psn}.` }),
