@@ -3,23 +3,68 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GTA VI trophy checklist</title>
+<title>LAST SAVE - GTA VI trophy guide</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-  <h1>GTA VI trophy checklist</h1>
-  <p id="progress">0 of 55 earned</p>
+<header class="top">
+  <div class="brand">
+    <h1>LAST SAVE</h1>
+    <p class="sub">GTA VI trophy guide &amp; missable timeline</p>
+  </div>
+  <div class="progress" aria-live="polite">
+    <div class="big"><span id="earned" class="num">0</span><span class="slash">/</span><span id="total" class="num">55</span>
+      <span id="pct" class="num pct">0%</span></div>
+    <div id="grades" class="grades"></div>
+    <div class="pointsbar" role="progressbar" aria-label="Trophy points" id="ptsbar"><div id="ptsfill"></div></div>
+    <div class="ptslabel"><span id="pts" class="num">0</span> / <span id="ptstotal" class="num">1350</span> trophy points</div>
+  </div>
+  <div id="saved" class="saved" role="status">Saved in this browser: <span id="savedAt">nothing yet</span></div>
 </header>
-<div class="controls">
-  <label>Grade <select id="grade"><option value="all">All</option><option value="platinum">Platinum</option><option value="gold">Gold</option><option value="silver">Silver</option><option value="bronze">Bronze</option></select></label>
-  <button id="export" type="button">Export progress</button>
-  <label class="import">Import progress <input id="import" type="file" accept="application/json"></label>
-</div>
-<table>
-  <thead><tr><th>Earned</th><th>Trophy</th><th>Grade</th><th>How to get it</th></tr></thead>
-  <tbody id="rows"></tbody>
-</table>
-<script type="module" src="app.js"></script>
+
+<section id="audit" class="audit" aria-label="Data audit"></section>
+
+<main id="main">
+  <div id="listView">
+    <section class="controls" aria-label="Spoilers and filters">
+      <div class="row">
+        <label>I am in
+          <select id="chapter">
+            <option value="0">Before starting</option>
+            <option value="1">Chapter 1</option>
+            <option value="2">Chapter 2</option>
+            <option value="3">Chapter 3</option>
+            <option value="4">Chapter 4</option>
+            <option value="5">Chapter 5</option>
+            <option value="6">Finished</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="hideHidden"> Hide hidden trophies</label>
+        <span class="hint">Story trophies after your chapter are blurred.</span>
+      </div>
+      <div class="row">
+        <label>Grade <select id="fGrade"><option value="all">All</option><option value="platinum">Platinum</option><option value="gold">Gold</option><option value="silver">Silver</option><option value="bronze">Bronze</option></select></label>
+        <label>Category <select id="fCat"></select></label>
+        <label>Confidence <select id="fConf"><option value="all">All</option><option value="confirmed">Confirmed</option><option value="single-source">Single source</option><option value="conflict">Conflict</option><option value="unconfirmed">Unconfirmed</option></select></label>
+        <label>Search <input id="fQ" type="search" placeholder="Trophy name"></label>
+        <button id="fClear" type="button">Clear filters</button>
+        <span id="shown" class="shown num"></span>
+      </div>
+    </section>
+    <div id="stages"></div>
+  </div>
+  <div id="detailView" hidden></div>
+</main>
+
+<section class="tools" aria-label="Save data">
+  <button id="export" type="button">Export</button>
+  <label class="filebtn">Import <input id="import" type="file" accept="application/json,.json"></label>
+  <button id="reset" type="button" class="danger-ghost">Reset</button>
+  <span id="toolmsg" class="hint" role="status"></span>
+</section>
+
+<footer>Unofficial fan guide, not affiliated with Rockstar Games or Sony.</footer>
+<script src="app.js"></script>
 </body>
 </html>
