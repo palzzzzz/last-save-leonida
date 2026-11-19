@@ -194,7 +194,7 @@
     for (const [key, label] of groups) {
       const inG = spots.filter((sp) => sp.region === key);
       if (!inG.length) continue;
-      kids.push(h('h4', { class: 'mgroup', text: label }), h('div', { class: 'mgrid' }, inG.map((sp) => medCell(sp, unlocked))));
+      kids.push(h('h4', { class: 'mgroup', text: label }), h('div', { class: 'mgrid g-' + key }, inG.map((sp) => medCell(sp, unlocked))));
     }
     kids.push(h('p', { class: 'hint', text: 'Checking spots here never checks the trophy itself: tick “Earned” above when the game awards it.' }));
     el.replaceChildren(...kids);
@@ -232,7 +232,7 @@
     const diamond = (cx, cy) => s('path', { d: `M${cx} ${cy - 11} L${cx + 11} ${cy} L${cx} ${cy + 11} L${cx - 11} ${cy} Z`, class: 'open-mark' });
     const open = [
       [slotX(2) + 18, 222, ['Both characters playable:', 'meditations count double']],
-      [slotX(2) + 18, 290, ['Scooter Bros app (Moses)']],
+      [slotX(2) + 18, 276, ['Scooter Bros app (Moses)']],
       [slotX(4) + 18, 222, ['Bank vaults open']],
     ];
     for (const [cx, cy, lines] of open) {
@@ -249,7 +249,8 @@
     svg.append(s('line', { x1: slotX(n), x2: slotX(n), y1: axisY, y2: axisY + 8, class: 'axis' }));
     // YOU marker
     const yx = slotX(state.chapter) + w / 2;
-    svg.append(s('line', { x1: yx, x2: yx, y1: 190, y2: axisY - 20, class: 'you-line' }));
+    // the dashed line goes under the labels (inserted right after the bands) so it never strikes through text
+    svg.insertBefore(s('line', { x1: yx, x2: yx, y1: 190, y2: axisY - 20, class: 'you-line' }), svg.children[n]);
     svg.append(s('path', { d: `M${yx - 13} ${axisY - 22} L${yx + 13} ${axisY - 22} L${yx} ${axisY - 2} Z`, class: 'you-mark', id: 'tlYou', 'data-chapter': state.chapter }));
     svg.append(s('text', { x: yx, y: axisY - 28, 'text-anchor': 'middle', class: 'tl-big you' }, 'YOU'));
     $('tlsvg').replaceChildren(svg);
@@ -442,9 +443,12 @@
     const read = last ? new Date(last + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'n/a';
     const head = h('tr', {}, h('th', { class: 'c-psn', text: '#' }), h('th', { class: 'c-name', text: 'Trophy' }), h('th', { text: 'Grade' }), h('th', { text: 'Confidence' }),
       srcs.map((x) => h('th', { class: 'c-src', title: x.name, text: x.id })));
-    const rows = doc.trophies.map((t) => h('tr', { 'data-psn': t.psn },
+    const mkRow = (t) => h('tr', { 'data-psn': t.psn },
       h('td', { class: 'c-psn num', text: String(t.psn) }), h('td', { class: 'c-name', text: t.name }), h('td', {}, chip(t.grade)), h('td', {}, badge(t.confidence)),
-      srcs.map((x) => (t.sources || []).includes(x.id) ? h('td', { class: 'c-src yes', title: x.name, 'aria-label': 'cited in ' + x.id, text: '●' }) : h('td', { class: 'c-src', 'aria-label': 'not cited in ' + x.id }))));
+      srcs.map((x) => (t.sources || []).includes(x.id) ? h('td', { class: 'c-src yes', title: x.name, 'aria-label': 'cited in ' + x.id, text: '●' }) : h('td', { class: 'c-src', 'aria-label': 'not cited in ' + x.id })));
+    // Two half-tables (trophies 1-28 and 29-55): side by side on wide screens so the whole matrix fits one screen, stacked on narrow ones.
+    const half = Math.ceil(doc.trophies.length / 2);
+    const matrixTable = (list) => h('div', { class: 'matrixwrap' }, h('table', { class: 'matrix' }, h('thead', {}, head.cloneNode(true)), h('tbody', {}, list.map(mkRow))));
     const conflicts = doc.conflicts.map((c) => h('article', { class: 'conflict' },
       h('div', { class: 'chead' }, h('span', { class: 'badge conflict' }, h('i', { text: '!', 'aria-hidden': 'true' }), 'sources disagree'), h('h3', { text: c.topic })),
       h('div', { class: 'sides' }, c.sides.map((sd, i) => h('div', { class: 'side' },
@@ -454,15 +458,16 @@
     el.replaceChildren(
       h('section', { class: 'apanel' }, h('h2', { text: 'Source matrix' }),
         h('p', { class: 'hint', text: `${doc.trophies.length} trophies × ${srcs.length} sources. ● = the source is cited for that trophy.` }),
-        h('div', { class: 'matrixwrap' }, h('table', { class: 'matrix' }, h('thead', {}, head), h('tbody', {}, rows)))),
-      h('section', { class: 'apanel' }, h('h2', { text: `Conflicts (${doc.conflicts.length})` }), ...conflicts),
-      h('section', { class: 'apanel' }, h('h2', { text: 'Data status' }),
+        h('div', { class: 'matrixpair' }, matrixTable(doc.trophies.slice(0, half)), matrixTable(doc.trophies.slice(half)))),
+      h('div', { class: 'abottom' },
+      h('section', { class: 'apanel aconf' }, h('h2', { text: `Conflicts (${doc.conflicts.length})` }), h('div', { class: 'conflicts' }, conflicts)),
+      h('section', { class: 'apanel adata' }, h('h2', { text: 'Data status' }),
         h('p', {}, 'Last saved: ', h('span', { class: 'num js-savedat', text: state.savedAt ? fmtDate(state.savedAt) : 'nothing yet' })),
         h('p', { class: 'num', text: 'Sources read ' + read }),
         h('div', { class: 'tools2' },
           h('button', { type: 'button', id: 'export2', onclick: doExport, text: 'Export' }),
           h('label', { class: 'filebtn' }, 'Import ', h('input', { type: 'file', id: 'import2', accept: 'application/json,.json', onchange: (e) => { const f = e.target.files[0]; e.target.value = ''; doImport(f); } })),
-          h('span', { class: 'hint', id: 'toolmsg2', role: 'status' }))));
+          h('span', { class: 'hint', id: 'toolmsg2', role: 'status' })))));
   }
   function route() {
     const m = /^#t\/(\d+)$/.exec(location.hash);
@@ -471,6 +476,8 @@
     $('auditView').hidden = !audit;
     for (const id of ['timeline', 'before', 'tools', 'main', 'audit']) $(id).hidden = audit;
     $('viewGuide').setAttribute('aria-pressed', String(!audit)); $('viewAudit').setAttribute('aria-pressed', String(audit));
+    document.body.classList.toggle('detail-open', !audit && !!m);
+    document.body.classList.toggle('audit-open', audit);
     if (audit) { currentDetail = null; renderAuditView(); window.scrollTo(0, 0); return; }
     if (m) {
       currentDetail = Number(m[1]);
